@@ -1,0 +1,304 @@
+---
+title: "EDA_workspace"
+author: "Casey McGonigle"
+date: "Nov. 11, 2021"
+output:
+  html_document: default
+  pdf_document: default
+always_allow_html: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+
+friends <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-09-08/friends.csv')
+friends_emotions <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-09-08/friends_emotions.csv')
+friends_info <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-09-08/friends_info.csv')
+```
+```{r, echo = FALSE}
+colnames(friends)
+colnames(friends_emotions)
+colnames(friends_info)
+```
+
+### friends_emotions is missing some rows (full scenes, actually & everything in seasons 5-10)
+```{r}
+print(nrow(friends))
+print("^friends -- we will NOT be using this dataset. Although it seems to have every line from all 10 seasons of the show, it fails to include any information on emotion or views")
+nrow(friends_emotions)
+print("^friends_emotions -- we WILL be using this dataset to determine how prevalent emotions were in each episode!
+      1 issue: it doesn't have every scene & it doesn't have every episode! Only seasons 1-4. Scenes tbd")
+nrow(friends_info)
+print("^friends_info -- we WILL be using this dataset to determine when episodes aired and how many views each episode got")
+```
+
+
+## Including Plots
+
+You can also embed plots, for example:
+
+
+#### Millions of US Views for Each Episode
+```{r pressure, echo=FALSE}
+library(ggplot2)
+library(plotly)
+
+p <- ggplot(friends_info, aes(air_date, us_views_millions, color = episode)) + ggtitle("FRIENDS: Number of Views for Each Episode") + xlab("Air Date") + ylab("US Views (Millions)") + geom_point()
+
+ggplotly(p)
+
+```
+
+
+#### Raw Counts of Each Emotion
+```{r}
+barplot(sort(table(friends_emotions$emotion), decreasing = TRUE))
+```
+
+
+#### Raw Counts of top 20 most common characters speaking 
+```{r -- friends dataset}
+top20 <- data.frame(sort(table(friends$speaker), decreasing = TRUE)[1:20])
+
+
+colnames(top20) <- c('Characters', 'Lines')
+top20$Characters = as.character(top20$Characters)
+top20
+```
+
+
+```{r}
+ggplot(top20, aes(x = reorder(Characters, -Lines), y = Lines, by = Lines)) + 
+  geom_bar(stat = "identity") + 
+  xlab("Characters") + 
+  ylab("Number of Lines") + 
+  ggtitle("FRIENDS: Number of Lines for each Character (top 20)") + 
+  theme( axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) 
+```
+
+
+
+
+
+
+```{r -- friend_emotion dataset, error = FALSE}
+#""" Number of utterances in each scene """ 
+library(dplyr)
+utter_by_scene <- friends_emotions %>%
+  group_by(season, episode, scene) %>%
+  summarise(num_utterances = n())
+
+head(utter_by_scene)
+```
+
+```{r -- friend_emotion dataset2}
+#""" Number of utterances in each scene """ 
+utter_by_ep <- friends_emotions %>%
+  group_by(season, episode) %>%
+  summarise(num_utterances = n())
+
+head(utter_by_ep)
+```
+
+
+
+
+```{r -- friends_emotions dataset3}
+ggplot(utter_by_ep, aes(x = c(1:nrow(utter_by_ep)), y = num_utterances, color = factor(season))) + geom_point() +
+  labs(x = "Episode #", y = "Number of Utterances", title = "Friends -- Utterances per Episode")
+
+```
+
+
+
+## Making the Final Datasets
+
+```{r}
+print("friends_emotions")
+print(nrow(friends_emotions))
+print (colnames(friends_emotions))
+print("------")
+print("friends_info")
+print(nrow(friends_info))
+colnames(friends_info)
+```
+```{r - friends_emotions}
+##inspect friends_emotions
+friends_emotions
+head(friends_emotions)
+tail(friends_emotions)
+```
+
+```{r}
+## add column that gives the raw line index #
+friends_emotions$line_index <- 1:nrow(friends_emotions)
+friends_emotions
+```
+
+
+```{r -- friends_info 1}
+#inspect friends_info
+head(friends_info)
+```
+
+```{r -- friends_info 2}
+## add column that gives the raw episode index #
+friends_info$episode_index <- 1:nrow(friends_info)
+friends_info
+```
+
+
+
+
+```{r -- friends_emotions & friends_info > full_emotions}
+full_emotions <- merge(x = friends_emotions, y = friends_info, by.x = c("season", "episode"), by.y = c("season", "episode")) %>%
+  arrange(line_index)
+
+full_emotions
+  
+```
+```{r -- full_emotions}
+tail(full_emotions)
+```
+
+```{r, eval = FALSE, echo = FALSE}
+unique(full_emotions$episode_index)
+unique(full_emotions$line_index)
+```
+
+
+
+
+### Look into full_emotions
+
+
+
+```{r - full_emotions -- making graphs}
+library(tidyverse)
+ggplot(full_emotions, aes(x=season)) + geom_bar() + ggtitle("FRIENDS: Number of Lines in each season of the full_emotions dataset")
+ggplot(data = full_emotions, aes(x=episode_index, fill = emotion)) + geom_bar() + ggtitle("FRIENDS: Number of lines in each episode -- first 4 seasons")
+ggplot(data = full_emotions, aes(x=season, fill = emotion)) + geom_bar() + ggtitle("FRIENDS: Number of lines in each season, stacked by emotion")
+```
+
+```{r -- checkout full_emotions}
+full_emotions
+```
+
+
+## Make emotion_counts Dataframe -- each row is one episode with the counts of each emotion in each episode as columns 
+
+
+```{r -- make small_emotions}
+small_emotions <- full_emotions %>%
+  select(c("emotion","us_views_millions", "episode_index", "season", "episode" ))
+
+#small_emotions <- full_emotions %>%
+#  select(c("emotion", 'us_views_millions', 'episode_index'))
+small_emotions
+```
+
+
+```{r -- make dummy dataset}
+library(caret)
+
+#define one-hot encoding function
+dummy <- dummyVars(" ~ .", data=small_emotions)
+
+#perform one-hot encoding on data frame
+dumb_emotions <- data.frame(predict(dummy, newdata=small_emotions))
+
+#view final data frame
+dumb_emotions
+  
+```
+```{r -- make emotion_counts}
+emotion_counts <- summarise(
+  select(
+    group_by(dumb_emotions, episode_index, season, episode, us_views_millions),
+    emotionJoyful, emotionMad, emotionNeutral, emotionPeaceful,
+    emotionPowerful, emotionSad, emotionScared
+  ),
+  joy = sum(emotionJoyful), mad = sum(emotionMad),
+  neutral = sum(emotionNeutral), peace = sum(emotionPeaceful),
+  power = sum(emotionPowerful), sad = sum(emotionSad),
+  scared = sum(emotionScared)
+)
+
+emotion_counts
+```
+
+
+
+
+```{r -- first set of plots}
+ggplot(emotion_counts, aes(x = episode_index, y = joy, fill = season)) + geom_bar(stat = "identity" ) + ggtitle("FRIENDS: Number of JOYful lines in each episode") + ylim(0,100)
+ggplot(emotion_counts, aes(x = episode_index, y = mad, fill = season)) + geom_bar(stat = "identity" ) + ggtitle("FRIENDS: Number of MAD lines in each episode")+ ylim(0,100)
+ggplot(emotion_counts, aes(x = episode_index, y = neutral, fill = season)) + geom_bar(stat = "identity" ) + ggtitle("FRIENDS: Number of NEUTRAL lines in each episode")+ ylim(0,100)
+ggplot(emotion_counts, aes(x = episode_index, y = peace, fill = season)) + geom_bar(stat = "identity" ) + ggtitle("FRIENDS: Number of PEACE lines in each episode")+ ylim(0,100)
+ggplot(emotion_counts, aes(x = episode_index, y = power, fill = season)) + geom_bar(stat = "identity" ) + ggtitle("FRIENDS: Number of POWER lines in each episode")+ ylim(0,100)
+ggplot(emotion_counts, aes(x = episode_index, y = sad, fill = season)) + geom_bar(stat = "identity" ) + ggtitle("FRIENDS: Number of SAD lines in each episode")+ ylim(0,100)
+ggplot(emotion_counts, aes(x = episode_index, y = scared, fill = season)) + geom_bar(stat = "identity" ) + ggtitle("FRIENDS: Number of SCARED lines in each episode")+ ylim(0,100)
+
+```
+
+
+```{r -- creating final plots}
+
+j <- ggplot(emotion_counts, aes(x = joy, y = us_views_millions, fill = episode_index)) + 
+  geom_point() + xlim(0, 100) + ggtitle("FRIENDS: # of JOYFUL Utterances v. Millions of US Views")
+
+m <- ggplot(emotion_counts, aes(x = mad, y = us_views_millions, fill = episode_index)) + 
+  geom_point() + xlim(0, 100) + ggtitle("FRIENDS: # of MAD Utterances v. Millions of US Views")
+
+n <- ggplot(emotion_counts, aes(x = neutral, y = us_views_millions, fill = episode_index)) + 
+  geom_point() + xlim(0, 100) + ggtitle("FRIENDS: # of NEUTRAL Utterances v. Millions of US Views")
+
+pe <- ggplot(emotion_counts, aes(x = peace, y = us_views_millions, fill = episode_index)) + 
+  geom_point() + xlim(0, 100) + ggtitle("FRIENDS: # of PEACE Utterances v. Millions of US Views")
+
+p <- ggplot(emotion_counts, aes(x = power, y = us_views_millions, fill = episode_index)) + 
+  geom_point() + xlim(0, 100) + ggtitle("FRIENDS: # of POWER Utterances v. Millions of US Views")
+
+s <- ggplot(emotion_counts, aes(x = sad, y = us_views_millions, fill = episode_index)) + 
+  geom_point() + xlim(0, 100) + ggtitle("FRIENDS: # of SAD Utterances v. Millions of US Views")
+
+sc <- ggplot(emotion_counts, aes(x = scared, y = us_views_millions, fill = episode_index)) + 
+  geom_point() + xlim(0, 100) + ggtitle("FRIENDS: # of SCARED Utterances v. Millions of US Views")
+
+
+j
+m
+n
+pe
+p
+s
+sc
+
+```
+```{r -- second set of plots}
+## LOOKS like we maybe have a double plotted point (the ones with episode_index = 36 and 37...can you find em?)
+ggplotly(j, tooltip = c("episode_index", "joy", "us_views_millions"))
+ggplotly(m, tooltip = c("episode_index", "mad", "us_views_millions"))
+ggplotly(n, tooltip = c("episode_index", "neutral", "us_views_millions"))
+ggplotly(pe, tooltip = c("episode_index", "peace", "us_views_millions"))
+ggplotly(p, tooltip = c("episode_index", "power", "us_views_millions"))
+ggplotly(s, tooltip = c("episode_index", "sad", "us_views_millions"))
+ggplotly(sc, tooltip = c("episode_index", "scared", "us_views_millions"))
+
+```
+
+
+
+
+
+
+
