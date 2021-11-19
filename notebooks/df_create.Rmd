@@ -45,8 +45,6 @@ print("^friends_info -- we WILL be using this dataset to determine when episodes
 friends_emotions
 ```
 
-
-
 ```{r -- friend_emotion dataset, error = FALSE}
 #Make DF emot_by_ep that has the count of each emotion in each episode
 
@@ -78,12 +76,6 @@ emot_by_ep
 ```
 
 
-
-
-
-
-
-
 ### DF2: friends_info has the 'metadata' on each episode like views, air_date, director etc.
 
 ```{r -- friends_info 2}
@@ -108,12 +100,8 @@ colnames(friends_info)
 
 
 ## Making the Final Datasets 
-### 2 Versions
 #### 1. episode_by_emotions -- includes the pure counts and %s of emotions in each episode + the metadata about each episode
 #### Note: when we build the model, we'll likely need to be selective about which columns to use to avoid perfect colinearity!
-
-
-
 
 ```{r -- emot_by_ep & friends_info > episode_by_emotions}
 episode_by_emotions <- merge(x = emot_by_ep, y = friends_info, by.x = c("season", "episode"), by.y = c("season", "episode")) %>%
