@@ -1,0 +1,118 @@
+---
+title: "initial_assumptions"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+friends <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-09-08/friends.csv')
+friends_emotions <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-09-08/friends_emotions.csv')
+friends_info <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-09-08/friends_info.csv')
+```
+
+### friends_emotions is missing some rows (full scenes, actually & everything in seasons 5-10)
+```{r}
+print(nrow(friends))
+print("^friends -- we will NOT be using this dataset. Although it seems to have every line from all 10 seasons of the show, it fails to include any information on emotion or views")
+nrow(friends_emotions)
+print("^friends_emotions -- we WILL be using this dataset to determine how prevalent emotions were in each episode!
+      1 issue: it doesn't have every scene & it doesn't have every episode! Only seasons 1-4. Scenes tbd")
+nrow(friends_info)
+print("^friends_info -- we WILL be using this dataset to determine when episodes aired and how many views each episode got")
+```
+
+## Creating Intermediate DataFrames
+
+### DF1: emot_by_ep has the count of each emotion in each episode
+
+```{r}
+friends_emotions
+```
+
+```{r -- friend_emotion dataset, error = FALSE}
+#Make DF emot_by_ep that has the count of each emotion in each episode
+emot_by_ep <- friends_emotions %>%
+  group_by(season, episode, emotion) %>%
+  summarise(num_utterances = n()) %>%
+  spread(emotion, num_utterances) 
+## Replace any NA Values with 0s
+emot_by_ep[is.na(emot_by_ep)] <- 0
+## Create the tot_emot column that has the total # of emotional utterances in an episode
+emot_by_ep <- emot_by_ep %>%
+  mutate(tot_emot = Joyful + Mad + Neutral + Peaceful + Powerful + Sad + Scared)
+  
+emot_by_ep
+```
+
+```{r}
+## Add new columns to emot_by_ep that track the % of each emotion (not just raw count)
+emot_by_ep$Joyful_percent <- (emot_by_ep$Joyful/emot_by_ep$tot_emot) * 100
+emot_by_ep$Mad_percent <- (emot_by_ep$Mad/emot_by_ep$tot_emot) * 100
+emot_by_ep$Neutral_percent <- (emot_by_ep$Neutral/emot_by_ep$tot_emot) * 100
+emot_by_ep$Peaceful_percent <- (emot_by_ep$Peaceful/emot_by_ep$tot_emot) * 100
+emot_by_ep$Powerful_percent <- (emot_by_ep$Powerful/emot_by_ep$tot_emot) * 100
+emot_by_ep$Sad_percent <- (emot_by_ep$Sad/emot_by_ep$tot_emot) * 100
+emot_by_ep$Scared_percent <- (emot_by_ep$Scared/emot_by_ep$tot_emot) * 100
+emot_by_ep
+```
+
+
+### DF2: friends_info has the 'metadata' on each episode like views, air_date, director etc.
+
+```{r -- friends_info 2}
+## add column that gives the raw episode index #
+friends_info$episode_index <- 1:nrow(friends_info)
+friends_info
+```
+
+```{r}
+## Inspect 2 datasets that we'll merge together
+emot_by_ep 
+friends_info
+print("emot_by_ep")
+print(nrow(emot_by_ep))
+print (colnames(emot_by_ep))
+print("              ")
+print("friends_info")
+print(nrow(friends_info))
+colnames(friends_info)
+```
+
+
+## Making the Final Datasets 
+#### 1. episode_by_emotions -- includes the pure counts and %s of emotions in each episode + the metadata about each episode
+#### Note: when we build the model, we'll likely need to be selective about which columns to use to avoid perfect colinearity!
+
+```{r -- emot_by_ep & friends_info > episode_by_emotions}
+episode_by_emotions <- merge(x = emot_by_ep, y = friends_info, by.x = c("season", "episode"), by.y = c("season", "episode")) %>%
+  arrange(episode_index)
+episode_by_emotions
+  
+```
+```{r -- episode_by_emotions}
+tail(episode_by_emotions)
+```
+
+
+## Test Assumptions
+
+#### IID
+Given that we are only looking at data from one show, the data is not IID if this model is used to generalize the effect of emotions on viewership in other shows. Instead, we can use it to explain the causal relationship between the two variables in Friends and try to generalize to future seasons. In this case, the variables are time dependent but the autocorrelation it causes will be addressed by controlling for time fixed effects. Otherwise given the size and sampling of the data, it is sufficiently IID to create a useful regression model. 
+
+#### Unique BLP exists
+
+The variables here are not linear combinations of each other; there is no perfect colinearity as seen in the lack of perfect correlation in the matrix below.
+
+```{r}
+cor(episode_by_emotions[c(1:17,23)])
+
+```
+
+
+Notes on time fixed effects and implementing them: https://www.econometrics-with-r.org/10-4-regression-with-time-fixed-effects.html 
+
+
