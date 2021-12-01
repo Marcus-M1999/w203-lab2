@@ -10,7 +10,6 @@ library(car)
 library(lmtest)
 library(sandwich)
 library(stargazer)
-
 ```
 
 
@@ -104,24 +103,59 @@ episode_by_emotions
 ```{r -- episode_by_emotions}
 show(episode_by_emotions)
 ```
+## Display scatterplots of each regression variable against US Views to check if we need transforms.
+
+Doesn't look like we need any transforms. 
+
+```{r}
+ggplot(episode_by_emotions, aes(x = Neutral_percent, y = us_views_millions)) + geom_point()
+
+ggplot(episode_by_emotions, aes(x = Joyful_percent, y = us_views_millions)) + geom_point()
+
+ggplot(episode_by_emotions, aes(x = Mad_percent, y = us_views_millions)) + geom_point()
+
+ggplot(episode_by_emotions, aes(x = Peaceful_percent, y = us_views_millions)) + geom_point()
+
+ggplot(episode_by_emotions, aes(x = Powerful_percent, y = us_views_millions)) + geom_point()
+
+ggplot(episode_by_emotions, aes(x = Sad_percent, y = us_views_millions)) + geom_point()
+
+ggplot(episode_by_emotions, aes(x = Scared_percent, y = us_views_millions)) + geom_point()
+
+```
 
 
-## Add Calendar_season column to our dataset
+
+## Add Calendar_season column to our dataset for time fixed effects.
 
 
+```{r}
 
+getSeason <- function(DATES) {
+    WS <- as.Date("2012-12-15", format = "%Y-%m-%d") # Winter Solstice
+    SE <- as.Date("2012-3-15",  format = "%Y-%m-%d") # Spring Equinox
+    SS <- as.Date("2012-6-15",  format = "%Y-%m-%d") # Summer Solstice
+    FE <- as.Date("2012-9-15",  format = "%Y-%m-%d") # Fall Equinox
 
+    # Convert dates from any year to 2012 dates
+    d <- as.Date(strftime(DATES, format="2012-%m-%d"))
 
+    ifelse (d >= WS | d < SE, "Winter",
+      ifelse (d >= SE & d < SS, "Spring",
+        ifelse (d >= SS & d < FE, "Summer", "Fall")))
+}
+
+episode_by_emotions$calendar_season <- getSeason(as.Date(episode_by_emotions$air_date, format = "%Y-%m-%d"))
+
+```
 
 
 ## Models
 
 ```{r}
-
 model_base <- lm(us_views_millions ~ Neutral_percent, data=episode_by_emotions)
 model_emotions_only <- lm(us_views_millions ~ Joyful_percent + Mad_percent + Peaceful_percent + Powerful_percent + Sad_percent + Scared_percent, data=episode_by_emotions)
-model_emotions_controls <- lm(us_views_millions ~ Joyful_percent + Mad_percent + Peaceful_percent + Powerful_percent + Sad_percent + Scared_percent + season + air_date,  data=episode_by_emotions)
-
+model_emotions_controls <- lm(us_views_millions ~ Joyful_percent + Mad_percent + Peaceful_percent + Powerful_percent + Sad_percent + Scared_percent + factor(season) + factor(calendar_season),  data=episode_by_emotions)
 stargazer(model_base,
           model_emotions_only,
           model_emotions_controls,
@@ -132,7 +166,7 @@ stargazer(model_base,
 ## Test Assumptions
 
 #### IID
-Given that we are only looking at data from one show, the data is not IID if this model is used to generalize the effect of emotions on viewership in other shows. Instead, we can use it to explain the causal relationship between the two variables in Friends and try to generalize to future seasons. In this case, the variables are time dependent but the autocorrelation it causes will be addressed by controlling for time fixed effects. Otherwise given the size and sampling of the data, it is sufficiently IID to create a useful regression model. 
+Given that we are only looking at data from one show, the data is not IID if this model is used to generalize the effect of emotions on viewership in other shows. Instead, we can use it to explain the causal relationship between the two variables in Friends and try to generalize to future seasons. In this case, the variables are time dependent but the autocorrelation it causes will be addressed by controlling for time using the calendar season of the air date. Otherwise given the size and sampling of the data, it is sufficiently IID to create a useful regression model. 
 
 #### Unique BLP exists
 
@@ -140,35 +174,25 @@ The variables here are not linear combinations of each other; there is no perfec
 
 ```{r}
 cor(episode_by_emotions[c(1, 11:17, 22)])
-
 ```
 
-
-Notes on time fixed effects and implementing them: https://www.econometrics-with-r.org/10-4-regression-with-time-fixed-effects.html 
 
 #### Linear Conditional Expectation
 The below plots reveal that all of our models meet the Linear Conditional Expectation requirement to use the Central Limit Theorem. To satisfy the requirement there needs to be a straight line of best fit when the residuals are plotted against the fitted values. This means that if the expectation was taken conditional on any x it would be the same value. Although all of the lines are not exactly straight issues do not arise due to the number of data points (97), and the small degree of curvature present. 
 
 ```{r}
-
 residualPlots(model_base)
 residualPlots(model_emotions_only)
 residualPlots(model_emotions_controls)
-
 ```
 
 #### Homoskedastic Errors
 When the model only includes the percentage of neutral emotions there is homoscedasticity (uniform variance) present however, this is not the case for the other two models. The Scale-Location plots (the square root of the standardized residuals plotted against the fitted values) reveal this as the lines for the last two models are not straight. One theory could be that the controls bias the models by introducing an outlier in the bottom left that creates this error. 
 
 ```{r}
-
 plot(model_base)
-
 plot(model_emotions_only)
-
 plot(model_emotions_controls)
-
-
 ```
 
 #### Normally Distributed Errors
@@ -177,14 +201,10 @@ To satisfy this assumptions the error from the models must have a mean of 0, nor
 res_base <- residuals(model_base)
 res_base_control <- residuals(model_base_controls)
 res_all_emotions <- residuals(model_all_emotions)
-
 qqPlot(res_base, xlab = "Theoretical Quantiles", ylab="Residuals")
 qqPlot(res_base_control, xlab = "Theoretical Quantiles", ylab="Residuals")
 qqPlot(res_all_emotions, xlab = "Theoretical Quantiles", ylab="Residuals")
-
 hist(res_base)
 hist(res_base_control)
 hist(res_all_emotions)
-
 ```
-
