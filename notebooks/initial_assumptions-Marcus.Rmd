@@ -13,11 +13,6 @@ library(stargazer)
 
 ```
 
-```{r}
-source('./src/load_and_clean.R')
-source('./src/get_robust_se.R')
-```
-
 
 ```{r}
 friends <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-09-08/friends.csv')
@@ -101,25 +96,36 @@ colnames(friends_info)
 ```{r -- emot_by_ep & friends_info > episode_by_emotions}
 episode_by_emotions <- merge(x = emot_by_ep, y = friends_info, by.x = c("season", "episode"), by.y = c("season", "episode")) %>%
   arrange(episode_index)
+## remove the 2 rows for "The One After The Super Bowl"
+episode_by_emotions <- episode_by_emotions[-c(36,37), ]
 episode_by_emotions
   
 ```
 ```{r -- episode_by_emotions}
-tail(episode_by_emotions)
+show(episode_by_emotions)
 ```
+
+
+## Add Calendar_season column to our dataset
+
+
+
+
+
+
 
 ## Models
 
 ```{r}
 
 model_base <- lm(us_views_millions ~ Neutral_percent, data=episode_by_emotions)
-model_base_controls <- lm(us_views_millions ~ Neutral_percent + directed_by + written_by + air_date, data=episode_by_emotions)
-model_all_emotions <- lm(us_views_millions ~ Joyful_percent + Mad_percent + Peaceful_percent + Powerful_percent + Sad_percent + directed_by + written_by + air_date, data=episode_by_emotions)
+model_emotions_only <- lm(us_views_millions ~ Joyful_percent + Mad_percent + Peaceful_percent + Powerful_percent + Sad_percent + Scared_percent, data=episode_by_emotions)
+model_emotions_controls <- lm(us_views_millions ~ Joyful_percent + Mad_percent + Peaceful_percent + Powerful_percent + Sad_percent + Scared_percent + season + air_date,  data=episode_by_emotions)
 
 stargazer(model_base,
-          model_base_controls,
-          model_all_emotions,
-          type = "text", apply.coef = exp, p.auto = FALSE, omit = "Constant")
+          model_emotions_only,
+          model_emotions_controls,
+          type = "text", star.cutoffs = c(.05, .01, .001), omit = "Constant")
 ```
 
 
@@ -130,10 +136,10 @@ Given that we are only looking at data from one show, the data is not IID if thi
 
 #### Unique BLP exists
 
-The variables here are not linear combinations of each other; there is no perfect colinearity as seen in the lack of perfect correlation in the matrix below.
+The variables here are not linear combinations of each other; there is no perfect colinearity as seen in the lack of perfect correlation in the matrix below. (Note we excluded one of the emotion_percents to avoid perfect colinearity). We check to make sure every covariance in our matrix is finite and the only entries with covariance == 1.0 are the ones between the exact same variables-- This is what we find! This suggests there is a unique BLP because there's no heavy tails in our dataset and there's no perfect colinearity.
 
 ```{r}
-cor(episode_by_emotions[c(1:17,23)])
+cor(episode_by_emotions[c(1, 11:17, 22)])
 
 ```
 
@@ -146,21 +152,23 @@ The below plots reveal that all of our models meet the Linear Conditional Expect
 ```{r}
 
 residualPlots(model_base)
-residualPlots(model_base_controls)
-residualPlots(model_all_emotions)
+residualPlots(model_emotions_only)
+residualPlots(model_emotions_controls)
 
 ```
 
-#### Homoscedastic Errors
+#### Homoskedastic Errors
 When the model only includes the percentage of neutral emotions there is homoscedasticity (uniform variance) present however, this is not the case for the other two models. The Scale-Location plots (the square root of the standardized residuals plotted against the fitted values) reveal this as the lines for the last two models are not straight. One theory could be that the controls bias the models by introducing an outlier in the bottom left that creates this error. 
 
 ```{r}
-print("Base model")
+
 plot(model_base)
-print("Base model with controls")
-plot(model_base_controls)
-print("Model with all emotions")
-plot(model_all_emotions)
+
+plot(model_emotions_only)
+
+plot(model_emotions_controls)
+
+
 ```
 
 #### Normally Distributed Errors
