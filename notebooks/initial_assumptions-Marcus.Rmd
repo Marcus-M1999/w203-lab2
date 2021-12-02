@@ -170,11 +170,11 @@ summary(model_emotions_only)
 ## Test Assumptions
 
 #### IID
-Given that we are only looking at data from one show, the data is not IID if this model is used to generalize the effect of emotions on viewership in other shows. Instead, we can use it to explain the causal relationship between the two variables in Friends and try to generalize to future seasons. In this case, the variables are time dependent but the autocorrelation it causes will be addressed by controlling for time using the calendar season of the air date. Otherwise given the size and sampling of the data, it is sufficiently IID to create a useful regression model. 
+Given that we are only looking at data from one show, the data is not IID if this model is used to generalize the effect of emotions on viewership in other shows. Instead, we can use it to explain the causal relationship between the two variables in Friends and try to generalize to future seasons. In this case, the variables are time-dependent but the autocorrelation it causes will be addressed by controlling for time using the calendar season of the air date. Otherwise given the size and sampling of the data, it is sufficiently IID to create a useful regression model. 
 
 #### Unique BLP exists
 
-The variables here are not linear combinations of each other; there is no perfect colinearity as seen in the lack of perfect correlation in the matrix below. (Note we excluded one of the emotion_percents to avoid perfect colinearity). We check to make sure every covariance in our matrix is finite and the only entries with covariance == 1.0 are the ones between the exact same variables-- This is what we find! This suggests there is a unique BLP because there's no heavy tails in our dataset and there's no perfect colinearity.
+The variables here are not linear combinations of each other; there is no perfect colinearity as seen in the lack of perfect correlation in the matrix below. (Note we excluded one of the emotion_percents to avoid perfect colinearity). We check to make sure every covariance in our matrix is finite and the only entries with covariance == 1.0 are the ones between the same variables-- This is what we find! This suggests there is a unique BLP because there are no heavy tails in our dataset and there's no perfect colinearity.
 
 ```{r}
 cor(episode_by_emotions[c(1, 11:17, 22)])
@@ -191,7 +191,7 @@ residualPlots(model_emotions_controls)
 ```
 
 #### Homoskedastic Errors
-The base model with Neutral percent and third model with 6 of the 7 emotions and controls appear to be relatively homoskedastic. This can be seen through the Scale-Location plots (the square root of the standardized residuals plotted against the fitted values) as the lines are relatively straight. However this is not the case for the second model as the line of best fit appears to be almost parabolic in shape. To adjust for the heteroskedasticity in the second model (model_emotions_only) we decided to run a coeftest on the model with standard robust errors. Although standard robust errors increase the variance and can potentially bias the results we did not find issues with it due to the high number of data points. This allows us to justify the homoskedastic errors assumption. 
+The base model with a Neutral percent and the third model with 6 of the 7 emotions and controls appear to be relatively homoskedastic. This can be seen through the Scale-Location plots (the square root of the standardized residuals plotted against the fitted values) as the lines are relatively straight. However, this is not the case for the second model as the line of best fit appears to be almost parabolic in shape. To adjust for the heteroskedasticity in the second model (model_emotions_only) we decided to run a coeftest on the model with standard robust errors. Although standard robust errors increase the variance and can potentially bias the results we did not find issues with it due to the high number of data points. This allows us to justify the homoskedastic errors assumption. 
 
 ```{r}
 
@@ -206,7 +206,7 @@ plot(model_emotions_controls)
 ```
 
 #### Normally Distributed Errors
-To satisfy this assumptions the error from the models must have a mean of 0, normal distribution, and constant variance. To test this we can either plot a histogram of the residuals and see the distribution or create a QQplot of the Theoretical Quantiles against the Residuals. In the QQplot we are looking for a blue box that is close to the line and includes all data points. We initially did not meet this assumption, but after ommitting two outliers this issue was fixed and the errors seem relatively normally distributed. 
+To satisfy this assumption the error from the models must have a mean of 0, normal distribution, and constant variance. To test this we can either plot a histogram of the residuals and see the distribution or create a Q-Q plot of the Theoretical Quantiles against the Residuals. In the Q-Q plot, we are looking for a blue box that is close to the line and includes all data points. We initially did not meet this assumption, but after omitting two outliers this issue was fixed and the errors seem relatively normally distributed. 
 ```{r}
 res_base <- residuals(model_base)
 res_base_control <- residuals(model_emotions_only)
