@@ -1,7 +1,8 @@
----
-title: "Final Report"
+--- 
+title: "In Touch With Their Emotions: The effect of emotional content in episodes of the TV show *Friends* on US viewership"
+subtitle: Elda Pere, Marcus Manos, Casey McGonigle
 output: pdf_document
-team: Elda Pere, Marcus Manos, Casey McGonigle
+always_allow_html: true
 ---
 
 ```{r setup, include=FALSE}
@@ -113,10 +114,10 @@ show(episode_by_emotions)
 ```
 # Model Building Process
 
+### EDA Section
+#### Display scatterplots of each regression variable against US Views to check if we need transforms.
 
-### Display scatterplots of each regression variable against US Views to check if we need transforms.
-
-Doesn't look like we need any transforms. 
+Do we need these scatterplots?. 
 
 ```{r -- scatterplots of x_vars v. us_views, echo = FALSE}
 ## Need to add titles to these plots?
@@ -128,6 +129,44 @@ ggplot(episode_by_emotions, aes(x = Powerful_percent, y = us_views_millions)) + 
 ggplot(episode_by_emotions, aes(x = Sad_percent, y = us_views_millions)) + geom_point()
 ggplot(episode_by_emotions, aes(x = Scared_percent, y = us_views_millions)) + geom_point()
 ```
+
+#### Millions of US Views for Each Episode
+Should we filter out the seasons after season 4? Or just include a line on the graph to show those don't get used?
+```{r -- Number of Views per Episode, echo=FALSE}
+library(ggplot2)
+library(plotly)
+
+p <- ggplot(friends_info, aes(air_date, us_views_millions, color = episode)) + ggtitle("FRIENDS: Number of Views for Each Episode") + xlab("Air Date") + ylab("US Views (Millions)") + geom_point()
+
+ggplotly(p)
+```
+
+#### Raw Counts of Each Emotion across the First 4 Seasons
+```{r -- Barplot of Total Counts of Each Emotion, echo = FALSE}
+barplot(sort(table(friends_emotions$emotion), decreasing = TRUE))
+```
+
+```{r -- friends_emotions & friends_info > full_emotions, include=FALSE}
+## Create DF for the next EDA viz
+full_emotions <- merge(x = friends_emotions, y = friends_info, by.x = c("season", "episode"), by.y = c("season", "episode")) %>%
+  arrange(episode_index)
+
+full_emotions
+```
+
+#### Number of Lines by each Emotion per Episode and Per Season
+```{r - full_emotions -- making graphs, echo = FALSE}
+library(tidyverse)
+ggplot(data = full_emotions, aes(x=episode_index, fill = emotion)) + geom_bar() + ggtitle("FRIENDS: Number of lines in each episode, stacked by emotion")
+ggplot(data = full_emotions, aes(x=season, fill = emotion)) + geom_bar() + ggtitle("FRIENDS: Number of lines in each season, stacked by emotion")
+```
+
+
+
+
+
+
+
 
 ```{r -- Add Calendar_season column, echo=FALSE}
 
