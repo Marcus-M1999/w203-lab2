@@ -1,0 +1,243 @@
+---
+title: "Final Report"
+output: pdf_document
+team: Elda Pere, Marcus Manos, Casey McGonigle
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(car)
+library(lmtest)
+library(sandwich)
+library(stargazer)
+```
+# **Introduction**
+
+
+
+# **Description of the Data & Research Design**
+
+```{r -- Create Data, include=FALSE}
+friends <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-09-08/friends.csv')
+friends_emotions <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-09-08/friends_emotions.csv')
+friends_info <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-09-08/friends_info.csv')
+```
+
+
+
+```{r -- inspect Data, results=FALSE, results=FALSE, echo=FALSE}
+# friends_emotions is missing some rows (full scenes, actually & everything in seasons 5-10)
+print(nrow(friends))
+print("^friends -- we will NOT be using this dataset. Although it seems to have every line from all 10 seasons of the show, it fails to include any information on emotion or views")
+nrow(friends_emotions)
+print("^friends_emotions -- we WILL be using this dataset to determine how prevalent emotions were in each episode!
+      1 issue: it doesn't have every scene & it doesn't have every episode! Only seasons 1-4. Scenes tbd")
+nrow(friends_info)
+print("^friends_info -- we WILL be using this dataset to determine when episodes aired and how many views each episode got")
+```
+
+### Creating Intermediate DataFrames
+
+1. DF1: friends_emotions has the emotional content of lines from every episode in the first 4 seasons mapped out. There are 7 possible emotions: Neutral, Sad, Mad, Joyful, Peaceful, Powerful, and Scared.
+```{r, results=FALSE, echo=FALSE}
+
+friends_emotions
+```
+
+```{r -- Create emot_by_ep, error = FALSE, include=FALSE}
+#Make DF emot_by_ep that has the count of each emotion in each episode in the first 4 seasons
+emot_by_ep <- friends_emotions %>%
+  group_by(season, episode, emotion) %>%
+  summarise(num_utterances = n()) %>%
+  spread(emotion, num_utterances) 
+## Replace any NA Values with 0s
+emot_by_ep[is.na(emot_by_ep)] <- 0
+## Create the tot_emot column that has the total # of emotional utterances in an episode
+emot_by_ep <- emot_by_ep %>%
+  mutate(tot_emot = Joyful + Mad + Neutral + Peaceful + Powerful + Sad + Scared)
+  
+emot_by_ep
+```
+
+```{r -- Add emotionalpercent columns, echo=FALSE, results=FALSE}
+## Add new columns to emot_by_ep that track the % of each emotion (not just raw count)
+emot_by_ep$Joyful_percent <- (emot_by_ep$Joyful/emot_by_ep$tot_emot) * 100
+emot_by_ep$Mad_percent <- (emot_by_ep$Mad/emot_by_ep$tot_emot) * 100
+emot_by_ep$Neutral_percent <- (emot_by_ep$Neutral/emot_by_ep$tot_emot) * 100
+emot_by_ep$Peaceful_percent <- (emot_by_ep$Peaceful/emot_by_ep$tot_emot) * 100
+emot_by_ep$Powerful_percent <- (emot_by_ep$Powerful/emot_by_ep$tot_emot) * 100
+emot_by_ep$Sad_percent <- (emot_by_ep$Sad/emot_by_ep$tot_emot) * 100
+emot_by_ep$Scared_percent <- (emot_by_ep$Scared/emot_by_ep$tot_emot) * 100
+emot_by_ep
+```
+
+
+ 2. DF2: friends_info has the 'metadata' on each episode like views, air_date, director etc.
+
+```{r -- add column with raw episode_index to friends_info, echo=FALSE, results=FALSE}
+##friends_info has the 'metadata' on each episode like views, air_date, director etc.
+## add column that gives the raw episode index #
+friends_info$episode_index <- 1:nrow(friends_info)
+friends_info
+```
+
+```{r -- inspect datasets to merge them, echo=FALSE, results=FALSE}
+## Inspect 2 datasets that we'll merge together
+emot_by_ep 
+friends_info
+print("emot_by_ep")
+print(nrow(emot_by_ep))
+print (colnames(emot_by_ep))
+print("              ")
+print("friends_info")
+print(nrow(friends_info))
+colnames(friends_info)
+```
+
+
+### Making the Final Datasets 
+1. episode_by_emotions -- A DF that includes the pure counts and %s of emotions in each episode plus the metadata about each episode
+
+
+```{r -- emot_by_ep & friends_info > episode_by_emotions, echo=FALSE, results=FALSE}
+episode_by_emotions <- merge(x = emot_by_ep, y = friends_info, by.x = c("season", "episode"), by.y = c("season", "episode")) %>%
+  arrange(episode_index)
+## remove the 2 rows for "The One After The Super Bowl"
+episode_by_emotions <- episode_by_emotions[-c(36,37), ]
+episode_by_emotions
+  
+```
+```{r -- episode_by_emotions, echo=FALSE, results=FALSE}
+show(episode_by_emotions)
+```
+# Model Building Process
+
+
+### Display scatterplots of each regression variable against US Views to check if we need transforms.
+
+Doesn't look like we need any transforms. 
+
+```{r -- scatterplots of x_vars v. us_views, echo = FALSE}
+## Need to add titles to these plots?
+ggplot(episode_by_emotions, aes(x = Neutral_percent, y = us_views_millions)) + geom_point()
+ggplot(episode_by_emotions, aes(x = Joyful_percent, y = us_views_millions)) + geom_point()
+ggplot(episode_by_emotions, aes(x = Mad_percent, y = us_views_millions)) + geom_point()
+ggplot(episode_by_emotions, aes(x = Peaceful_percent, y = us_views_millions)) + geom_point()
+ggplot(episode_by_emotions, aes(x = Powerful_percent, y = us_views_millions)) + geom_point()
+ggplot(episode_by_emotions, aes(x = Sad_percent, y = us_views_millions)) + geom_point()
+ggplot(episode_by_emotions, aes(x = Scared_percent, y = us_views_millions)) + geom_point()
+```
+
+```{r -- Add Calendar_season column, echo=FALSE}
+
+## Add Calendar_season column to our dataset for time fixed effects.
+getSeason <- function(DATES) {
+    WS <- as.Date("2012-12-15", format = "%Y-%m-%d") # Winter Solstice
+    SE <- as.Date("2012-3-15",  format = "%Y-%m-%d") # Spring Equinox
+    SS <- as.Date("2012-6-15",  format = "%Y-%m-%d") # Summer Solstice
+    FE <- as.Date("2012-9-15",  format = "%Y-%m-%d") # Fall Equinox
+    # Convert dates from any year to 2012 dates
+    d <- as.Date(strftime(DATES, format="2012-%m-%d"))
+    ifelse (d >= WS | d < SE, "Winter",
+      ifelse (d >= SE & d < SS, "Spring",
+        ifelse (d >= SS & d < FE, "Summer", "Fall")))
+}
+episode_by_emotions$calendar_season <- getSeason(as.Date(episode_by_emotions$air_date, format = "%Y-%m-%d"))
+```
+
+
+## Models
+
+```{r -- build models}
+model_base <- lm(us_views_millions ~ Neutral_percent, data=episode_by_emotions)
+model_emotions_only <- lm(us_views_millions ~ Joyful_percent + Mad_percent + Peaceful_percent + Powerful_percent + Sad_percent + Scared_percent, data=episode_by_emotions)
+model_emotions_controls <- lm(us_views_millions ~ Joyful_percent + Mad_percent + Peaceful_percent + Powerful_percent + Sad_percent + Scared_percent + factor(season) + factor(calendar_season),  data=episode_by_emotions)
+```
+
+# Results
+```{r -- create regression table, echo = FALSE}
+stargazer(model_base,
+          coeftest(model_emotions_only, vcovHC(model_emotions_only, type = "HC3")),
+          model_emotions_controls,
+          type = "text", star.cutoffs = c(.05, .01, .001), omit = "Constant")
+```
+
+
+```{r -- p_vals, echo=FALSE}
+#P values:
+
+print('P Values for Model 1')
+summary(model_base)$coefficients[,4]
+print('------------------------------------')
+print('')
+print('P Values for Model 2')
+coeftest(model_emotions_only, vcovHC(model_emotions_only, type = "HC3"))
+print('------------------------------------')
+print('')
+print('P Values for Model 3')
+summary(model_emotions_controls)$coefficients[,4]
+
+```
+# Statistical Limitations of Our Model
+
+#### Bonferroni Correction
+We realize that the models run above are regressing views on a number of emotion variables that could be considered part of a family. To keep the family wise error rate below 5%, we consider a Bonferroni correction for the 7 emotion variables (Neutral_percent, Joyful_percent, Mad_percent, Peaceful_percent, Powerful_percent, Sad_percent and Scared_percent).
+Since Powerful_percent is the only emotion variable that shows statistical significance in the Stargazer table (**p<0.01), our main question is whether this variable stays significant after applying the correction. When multiplying the current p value of  p = 0.006877 by the number of family elements - 7 - we get 0.048139. Despite the short distance to 0.05, we conclude that the percent of powerful utterances in a Friends episode has a significant effect on the number of U.S. views (in millions) it receives.
+
+#### IID
+Given that we are only looking at data from one show, the data is not IID if this model is used to generalize the effect of emotions on viewership in other shows. Instead, we can use it to explain the causal relationship between the two variables in Friends and try to generalize to future seasons. In this case, the variables are time-dependent but the autocorrelation it causes will be addressed by controlling for time using the calendar season of the air date. Otherwise given the size and sampling of the data, it is sufficiently IID to create a useful regression model. 
+
+#### Unique BLP exists
+
+The variables here are not linear combinations of each other; there is no perfect colinearity as seen in the lack of perfect correlation in the matrix below. (Note we excluded one of the emotion_percents to avoid perfect colinearity). We check to make sure every covariance in our matrix is finite and the only entries with covariance == 1.0 are the ones between the same variables-- This is what we find! This suggests there is a unique BLP because there are no heavy tails in our dataset and there's no perfect colinearity.
+
+```{r -- Unique BLP Check}
+cor(episode_by_emotions[c(1, 11:17, 22)])
+```
+
+
+#### Linear Conditional Expectation
+The below plots reveal that all of our models meet the Linear Conditional Expectation requirement to use the Central Limit Theorem. To satisfy the requirement there needs to be a straight line of best fit where the residuals are plotted against the fitted values. This means that if the expectation was taken conditional on any x it would be the same value. Although all of the lines are not exactly straight issues do not arise due to the number of data points (95), and the small degree of curvature present. 
+
+```{r -- Linear Conditional Expectation Check}
+residualPlots(model_base)
+residualPlots(model_emotions_only)
+residualPlots(model_emotions_controls)
+```
+
+#### Homoskedastic Errors
+The base model with a Neutral percent and the third model with 6 of the 7 emotions and controls appear to be relatively homoskedastic. This can be seen through the Scale-Location plots (the square root of the standardized residuals plotted against the fitted values) as the lines are relatively straight. However, this is not the case for the second model as the line of best fit appears to be almost parabolic in shape. To adjust for the heteroskedasticity in the second model (model_emotions_only) we decided to run a coeftest on the model with standard robust errors. Although standard robust errors increase the variance and can potentially bias the results we did not find issues with it due to the high number of data points. This allows us to justify the homoskedastic errors assumption. 
+
+```{r -- Homeoskedastic Errors Check}
+plot(model_base)
+plot(model_emotions_only)
+plot(model_emotions_controls)
+```
+
+#### Normally Distributed Errors
+To satisfy this assumption the error from the models must have a mean of 0, normal distribution, and constant variance. To test this we can either plot a histogram of the residuals and see the distribution or create a Q-Q plot of the Theoretical Quantiles against the Residuals. In the Q-Q plot, we are looking for a blue box that is close to the line and includes all data points. We initially did not meet this assumption, but after omitting two outliers this issue was fixed and the errors seem relatively normally distributed. 
+```{r -- Normally Distributed Errors Check}
+res_base <- residuals(model_base)
+res_base_control <- residuals(model_emotions_only)
+res_all_emotions <- residuals(model_emotions_controls)
+qqPlot(res_base, xlab = "Theoretical Quantiles", ylab="Residuals")
+qqPlot(res_base_control, xlab = "Theoretical Quantiles", ylab="Residuals")
+qqPlot(res_all_emotions, xlab = "Theoretical Quantiles", ylab="Residuals")
+hist(res_base)
+hist(res_base_control)
+hist(res_all_emotions)
+```
+
+
+
+# Structural Limitations of our Model
+
+
+
+
+# Conclusion
+
+
+
+
